@@ -6,18 +6,18 @@ This repository contains the code and utilities for closed-loop feedrate control
 
 ```
 baam_feedrate_control/
-├── jetson/                  # Jetson edge components
-│   ├── utils/               # Helper modules
-│   │   ├── camera_utils.py  # Video device management, directory & file I/O
+├── jetson/                    # Jetson edge components
+│   ├── utils/                 # Helper modules
+│   │   ├── camera_utils.py    # Video device management, directory & file I/O
 │   │   ├── frame_utils.py     # Frame listing, timestamp loading, locking
 │   │   └── processor.py       # Hough line detection, clustering, temperature logic
-│   ├── thermal_capture.py   # ThermalCapture class: camera streaming & saving
-│   ├── pi_controller.py          # ThermalCapture class: camera streaming & saving
-│   ├── process_frames.py    # Batch frame loading & processing, debug plots
-│   └── wcf_client.py              # WCF client wrapper for HMI get/set commands
-├── windows/                          # Windows receiver and launcher scripts
-│   └── run_experiment.py    # Launches receiver locally and Jetson main remotely
-└── jetson_main.py                 # Orchestrator on Jetson: WCF polling, PI, frame processing
+│   ├── thermal_capture.py     # ThermalCapture class: camera streaming & saving
+│   ├── pi_controller.py       # ThermalCapture class: camera streaming & saving
+│   ├── process_frames.py      # Batch frame loading & processing, debug plots
+│   └── wcf_client.py          # WCF client wrapper for HMI get/set commands
+├── windows/                   # Windows receiver and launcher scripts
+│   └── run_experiment.py      # Launches receiver locally and Jetson main remotely
+└── jetson_main.py             # Orchestrator on Jetson: WCF polling, PI, frame processing
 ```
 
 ## Usage
@@ -58,7 +58,7 @@ The `jetson_main.py` script will:
 
 - **JetsonMain** constants at the top of `jetson_main.py`:
 
-  - `WINDOWS_IP`, `PORT_BASE`, `LAYER_KEY`, `CONTROL_KEY`,
+  - `WINDOWS_IP`, `PORT_BASE`, `LAYER_KEY`, `CONTROL_KEY`, `CAM_INTEREST`, `N_POST_FRAMES`,
   - `PID_SETPOINT`, `PID_PARAMS` (kp/ki)
   - Poll interval, directories, log filenames.
 
@@ -70,6 +70,10 @@ The `jetson_main.py` script will:
 
   - Number of post-trigger frames `N`, offset `N_offset`.
   - Debug plot directory defaults to `<base>/<serial>/plots/<layer>/`.
+ 
+- **PI Controller** in `pi_controller.py`:
+
+  - 
 
 ## Logs and Outputs
 
