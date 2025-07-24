@@ -35,13 +35,13 @@ from jetson.process_frames import process_frames
 #from jetson.pid import PIDController
 
 # ─── Configuration Defaults ───────────────────────────────────────────────────
-WINDOWS_IP    = '192.168.0.151' #'192.168.0.2''192.168.0.151'
+WINDOWS_IP    = '192.168.0.2' #'192.168.0.151'
 PORT_BASE     = 12345
 GAIN_MODE     = 1   #low gain = 1, high_gain = 2
 EXPECTED_CAM  = 2
 
-LAYER_KEY     = 100    # cmd_id
-CONTROL_KEY   = 101    # Extra feedrate override
+LAYER_KEY     = 0    # cmd_id
+CONTROL_KEY   = 3    # Extra feedrate override
 
 CAM_INTEREST = '0018004a'  #'001b000d'
 N_POST_FRAMES = 30   # Number of frames to look at post layer change
@@ -125,7 +125,7 @@ def main():
     while True:
         raw = wcf.get_value(LAYER_KEY)
         try:
-            current_layer = int(float(raw))
+            current_layer = int(raw)
         except (TypeError, ValueError):
             logger.warning(f"Ignoring invalid layer value: {raw!r}")
             time.sleep(0.5)
@@ -137,22 +137,40 @@ def main():
         elif current_layer != last_layer:
 
             ts = datetime.datetime.now().isoformat()
-            logger.info(f"Layer changed: {last_layer} → {current_layer} @ {ts}")
-       
+            logger.info(f"Layer changed: {last_layer} → {current_layer}")
             csv_writer.writerow([ts, last_layer, current_layer])
             csv_file.flush()
             
+            base = '/mnt/external/wet_run_FIN/001b000d' 
 
+            fake_time = datetime.datetime(2025, 7, 1, 13, 15, 40)
+            
+            closest = find_closest_frame(f'{base_dir}/{CAM_INTEREST}', fake_time)
+            
+            logger.info(f"Closest frame to {fake_time.isoformat()} is {closest}")
+            
+            # # Process all frames for the previous layer
+            # frame_ids = tc.frames_for_layer(last_layer)
+            # temps = [process_frame(fid) for fid in frame_ids]
+            
+            base = '/mnt/external/wet_run_FIN'
+            prevs, recents = process_frames(
+            base_dir=base_dir,
+            serial=CAM_INTEREST,
+            trigger_frame=closest,
+            N=N_POST_FRAMES
+            )
+            
 
 
             # # Compute PID correction and push to HMI
             old_feed = float(wcf.get_value(CONTROL_KEY))
-            correction = wcf.set_value(CONTROL_KEY, old_feed + 1) #pid.update(temps, setpoint=PID_SETPOINT)
-            new_feed = float(wcf.get_value(CONTROL_KEY))
+            correction = wcf.set_value(CONTROL_KEY, np.random.choice(100)) #pid.update(temps, setpoint=PID_SETPOINT)
+            
             #wcf.set_value(CONTROL_KEY, correction)
             
             
-            logger.info(f"Feedrate changed: {old_feed} → {new_feed}")
+            logger.info(f"Feedrate changed: {old_feed} → {correction}")
             now = datetime.datetime.now().isoformat()
             feed_writer.writerow([now, last_layer, old_feed, correction])
             feed_file.flush()

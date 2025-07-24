@@ -9,10 +9,10 @@ baam_feedrate_control/
 ├── jetson/                    # Jetson edge components
 │   ├── utils/                 # Helper modules
 │   │   ├── camera_utils.py    # Video device management, directory & file I/O
-│   │   ├── frame_utils.py     # Frame listing, timestamp loading, locking
-│   │   └── processor.py       # Hough line detection, clustering, temperature logic
+│   │   ├── frame_utils.py       # Frame listing, timestamp loading, locking
+│   │   └── processor.py         # Hough line detection, clustering, temperature logic
 │   ├── thermal_capture.py     # ThermalCapture class: camera streaming & saving
-│   ├── pi_controller.py       # ThermalCapture class: camera streaming & saving
+│   ├── controller.py                 # PIFeedrateController: IMC method
 │   ├── process_frames.py      # Batch frame loading & processing, debug plots
 │   └── wcf_client.py          # WCF client wrapper for HMI get/set commands
 ├── windows/                   # Windows receiver and launcher scripts
