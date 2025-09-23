@@ -61,15 +61,15 @@ baam_feedrate_control/
     │  Windows HMI PC                                                         │
     │  ┌────────────────┐                                                     │
     │  │  WCF Service   │  Port 8733                                          │
-    │  │                │  ◄─────── GetValue(layer_number)                    │
-    │  │  - Layer Info  │  ◄─────── SetValue(feedrate_override)               │
-    │  │  - Feed Control│                                                     │
+    │  │                │                                                     │
+    │  │  - Layer Info  │  ◄─────── GetValue(layer_number)                    │
+    │  │  - Feed Control│  ◄─────── SetValue(feedrate_override                │
     │  └────────────────┘                                                     │
     │                                                                         │
     │  ┌────────────────┐                                                     │
     │  │  TCP Receiver  │  Ports 12345-12350                                  │
-    │  │                │  ◄─────── Thermal Frame Streams (6x)                │
-    │  │  - Display Grid│                                                     │
+    │  │                │                                                     │
+    │  │  - Display Grid│  ◄─────── Thermal Frame Streams (6x)                │
     │  └────────────────┘                                                     │
     └────────────┬────────────────────────────────────────────────────────────┘
                  │
