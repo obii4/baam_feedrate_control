@@ -1,29 +1,3 @@
-"""
-controller.py - PI temperature controller for BAAM feedrate adjustment.
-
-This module implements a PI (Proportional-Integral) controller using Internal 
-Model Control (IMC) tuning methodology for maintaining optimal layer adhesion 
-temperature in large-scale 3D printing. The controller adjusts feedrate based 
-on thermal feedback to compensate for heat accumulation/dissipation.
-
-Control Strategy:
-    - Temperature regulation via feedrate manipulation
-    - IMC-based tuning for robust performance
-    - Anti-windup to handle actuator saturation
-    - Rate limiting for mechanical constraints
-    - Deadband to reduce actuator wear
-
-Process Model:
-    T(t) = T0 + K_temp * (u(t) - u_nom)  # Temperature response
-    y(t) = y_sp + K_time * (u(t) - u_nom) # Layer time response
-    
-    Where u(t) is feedrate override (%)
-
-Author: Chris O'Brien
-Date Created: 09-23-25
-Version: 1.0
-"""
-
 import numpy as np
 from typing import Tuple, Optional, Dict
 import matplotlib.pyplot as plt
@@ -37,25 +11,7 @@ class PITemperatureController:
     PI Controller for 3D printer temperature control via feed rate adjustment.
     
     Uses Internal Model Control (IMC) tuning methodology with anti-windup,
-    rate limiting, and deadband features for robust temperature regulation
-    in Big Area Additive Manufacturing (BAAM).
-    
-    The controller operates on a first-order plus dead time (FOPDT) model:
-        G(s) = K * exp(-theta*s) / (tau*s + 1)
-    
-    Where:
-        K: Process gain (C per % feedrate)
-        tau: Time constant (seconds)
-        theta: Dead time (seconds, typically one layer or min expected layer time)
-    
-    Attributes:
-        T_sp: Temperature setpoint (C)
-        u_nom: Nominal feedrate (%)
-        Kp_T: Proportional gain (tuned via IMC)
-        Ki_T: Integral gain (tuned via IMC)
-        calibrated: Whether controller has been calibrated
-        history: Dict containing control history for analysis
-
+    rate limiting, and deadband features.
     """
     
     def __init__(self, 
@@ -68,22 +24,14 @@ class PITemperatureController:
         """
         Initialize PI controller with operational parameters.
         
-        Sets up controller limits, deadband, and initializes state variables.
-        Controller must be calibrated before use via calibrate_from_step_test().
-        
         Args:
-            setpoint: Target temperature in °C (typically 120-140°C for PLA)
-            nominal_feed: Baseline feed rate in % (usually 100%)
-            feed_limits: (min, max) feed rate limits in % to respect machine constraints
-            max_feed_change: Maximum feed rate change per layer in % 
-            temp_deadband: Temperature deadband for control action in C (reduces wear)
-            min_layer_time: Minimum allowable layer time in seconds (quality constraint)
-        
-        Note:
-            Feed limits should account for extruder capacity and motion system dynamics.
-            Deadband should be larger than temperature measurement noise (~2-3°C).
-    """
-        
+            setpoint: Target temperature in °C
+            nominal_feed: Baseline feed rate in %
+            feed_limits: (min, max) feed rate limits in %
+            max_feed_change: Maximum feed rate change per layer in %
+            temp_deadband: Temperature deadband for control action in °C
+            min_layer_time: Minimum allowable layer time in seconds
+        """
         # Operational parameters
         self.T_sp = setpoint
         self.u_nom = nominal_feed
@@ -115,68 +63,120 @@ class PITemperatureController:
             'errors': [],
             'integral_terms': []
         }
-    def determine_tau_exponential(self, times, temps, step_idx=None):
+    
+    def determine_tau_exponential(self, 
+                                  times: np.ndarray, 
+                                  temps: np.ndarray,
+                                  step_idx: Optional[int] = None) -> Dict[str, float]:
         """
-            Analyze step response to identify first-order system dynamics.
+        Analyze step response data to determine system parameters using exponential fitting.
+        
+        Args:
+            durations: Array of layer durations (time between measurements)
+            temps: Array of temperature measurements
+            plot: Whether to plot the results
             
-            Estimates time constant (tau) using 63.2% rise time method for a 
-            first-order system response. This simplified approach is robust to 
-            noise and suitable for online tuning.
+        Returns:
+            Dictionary containing:
+                - tau: Time constant (seconds)
+                - theta: Dead time (seconds)
+                - y_initial: Initial steady-state value
+                - y_final: Final steady-state value
+                - r_squared: Goodness of fit
+                - cumulative_time: Cumulative time array
+                - fitted_response: Fitted temperature response
+        """
+        
+        # Convert durations to cumulative time
+        t = np.cumsum(times)
+        y = temps.copy()
+        
+        # Add t=0 point if not present
+        if t[0] > 0:
+            t = np.insert(t, 0, 0)
+            y = np.insert(y, 0, y[0])
+        
+        # Define exponential model with dead time
+        def exponential_model(t_data: np.ndarray, 
+                            y_final: float, 
+                            y_initial: float, 
+                            tau: float, 
+                            theta: float) -> np.ndarray:
+            """First-order response with dead time"""
+            y_pred = np.zeros_like(t_data)
+            mask = t_data > theta
+            y_pred[mask] = y_initial + (y_final - y_initial) * (1 - np.exp(-(t_data[mask] - theta) / tau))
+            y_pred[~mask] = y_initial
+            return y_pred
+        
+        # Initial parameter estimates
+        y_initial = y[0]
+        y_final = np.mean(y[step_idx:])  # Average of last 5 points
+        tau_guess = (t[-1] - t[0]) / 4
+        theta_guess = 5  # Initial dead time guess
+        
+        # Parameter bounds
+        bounds = (
+            [y_final - 10, y_initial - 10, 1, 0],  # Lower bounds
+            [y_final + 10, y_initial + 10, 1000, 200]  # Upper bounds
+        )
+        
+        try:
+            # Perform curve fitting
+            popt, pcov = curve_fit(
+                exponential_model, t, y,
+                p0=[y_final, y_initial, tau_guess, theta_guess],
+                bounds=bounds,
+                maxfev=5000
+            )
             
-            Args:
-                times: Array of layer durations (seconds) 
-                temps: Array of layer temperatures (°C)
-                step_idx: Index where step change occurred (auto-detected if None)
-                
-            Returns:
-                Dictionary containing:
-                    - tau: Time constant in seconds (capped at 240s for stability)
-                    - theta: Dead time in seconds (default: one layer ~ 60s)
-                    - y_initial: Pre-step steady-state temperature
-                    - y_final: Post-step steady-state temperature
-                    
-            Note:
-                Uses simplified 63% method rather than curve fitting for robustness.
-                Tau represents the time for the system to reach 63.2% of final value.
-            """
-        if step_idx is None:
-            return {'tau': 60, 'theta': 60}  # Default fallback
-        
-        # Only use POST-STEP data for fitting
-        times_post = times[step_idx:]
-        temps_post = temps[step_idx:]
-        
-        # Create relative time from step point
-        t = np.cumsum(times_post)
-        t = t - t[0]  # Start at t=0 from step point
-        t = np.insert(t, 0, 0)
-        
-        y = np.array(temps_post)
-        
-        # Parameters
-        y_initial = np.mean(temps[:step_idx])  # Pre-step average
-        y_final = np.mean(temps_post[-3:])     # Post-step steady state
-        
-        # Simple tau estimate - time to reach 63% of change
-        change = y_final - y_initial
-        target = y_initial + 0.63 * change
-        
-        # Find when we cross 63% threshold
-        for i, temp in enumerate(y):
-            if (change < 0 and temp < target) or (change > 0 and temp > target):
-                tau = t[i] if i < len(t) else 60
-                print(tau)
-                break
-        else:
-            tau = 60  # Default if not found
-        
-        return {
-            'tau': min(tau, 240),  # Cap at 3 minutes
-            'theta': 60,  # One layer dead time
-            'y_initial': y_initial,
-            'y_final': y_final
-        }
+            y_final_fit, y_initial_fit, tau_fit, theta_fit = popt
+            
+            # Calculate fitted response
+            y_pred = exponential_model(t, *popt)
+            
+            # Calculate R-squared
+            ss_res = np.sum((y - y_pred) ** 2)
+            ss_tot = np.sum((y - np.mean(y)) ** 2)
+            r_squared = 1 - (ss_res / ss_tot)
+            
+            # Calculate parameter uncertainties
+            perr = np.sqrt(np.diag(pcov))
+            tau_std, theta_std = perr[2], perr[3]
+            
+            # Create results dictionary
+            results = {
+                'tau': tau_fit,
+                'theta': theta_fit,
+                'y_initial': y_initial_fit,
+                'y_final': y_final_fit,
+                'r_squared': r_squared,
+                'tau_std': tau_std,
+                'theta_std': theta_std,
+                'cumulative_time': t,
+                'fitted_response': y_pred,
+                'measured_temps': y,
+                'process_gain': y_final_fit - y_initial_fit,
+                'time_to_63_percent': tau_fit + theta_fit
+            }
+            
 
+            
+            return results
+            
+        except Exception as e:
+            print(f"Exponential fitting failed: {e}")
+            # Return basic estimates as fallback
+            return {
+                'tau': None,
+                'theta': None,
+                'y_initial': y_initial,
+                'y_final': y_final,
+                'r_squared': None,
+                'error': str(e)
+            }
+            
+    
     
     def set_calibration_values(self,
                                K_temp: float,
@@ -236,43 +236,19 @@ class PITemperatureController:
         """
         Calibrate controller from step test data or use predefined values.
         
-        Performs system identification from step response data and calculates
-        PI gains using Internal Model Control (IMC) tuning rules. IMC provides
-        good setpoint tracking and disturbance rejection for FOPDT processes.
-        
-        IMC Tuning Rules:
-            Kp = tau / (K * (lambda + theta))
-            Ki = Kp / tau
-            
-        Where lambda is the closed-loop time constant (tuning parameter).
-        
         Args:
-            times: Array of layer times (seconds)
-            temps: Array of previous layer temperatures (°C)
-            step_magnitude: Feed rate step change magnitude in % (negative for decrease)
-            imc_lambda: IMC tuning parameter - larger = more conservative (auto if None)
-            tau: Process time constant (seconds) - auto-calculated if None
-            theta: Process dead time (seconds) - auto-calculated if None  
+            times: Array of layer times
+            temps: Array of previous layer temperatures
+            step_magnitude: Feed rate step change magnitude in %
+            imc_lambda: IMC tuning parameter (auto-calculated if None)
+            tau: Process time constant (auto-calculated if None or auto_tune=True)
+            theta: Process dead time (auto-calculated if None or auto_tune=True)
             auto_tune: If True, automatically determine tau and theta from data
-            use_predefined: If True, skip calibration and use predefined_values
-            predefined_values: Dict with pre-calibrated parameters (see set_calibration_values)
+            use_predefined: If True, use values from predefined_values dict
+            predefined_values: Dict with keys: K_temp, K_time, Kp_T, Ki_T, T0, y_sp, u_initial
             
         Returns:
-            Dictionary containing:
-                - K_temp: Temperature gain (°C/%)
-                - K_time: Time gain (s/%) 
-                - Kp_T: Proportional gain
-                - Ki_T: Integral gain
-                - T0: Baseline temperature
-                - y_sp: Baseline layer time
-                - tau, theta, imc_lambda: Tuning parameters used
-                
-        Raises:
-            ValueError: If no step change detected or missing predefined values
-            
-        Note:
-            Step detection uses 40% threshold of time range.
-            Lambda defaults to 0.4 * theta for moderate response speed.
+            Dictionary containing calibration parameters
         """
         # Option 1: Use predefined values
         if use_predefined:
@@ -307,17 +283,15 @@ class PITemperatureController:
         step_idx = step_indices[0] + 1
         
         # Calculate baselines (before step)
-        self.y_sp = times[:step_idx + 1].mean()
-        self.T0 = temps[:step_idx + 1].mean()
+        self.y_sp = times[:step_idx].mean()
+        self.T0 = temps[:step_idx].mean()
         
         # Calculate steady-state values (after step)
-        y1 = times[step_idx + 1:].mean()
-        T1 = temps[step_idx + 1:].mean()
+        y1 = times[step_idx:].mean()
+        T1 = temps[step_idx:].mean()
         
         # Calculate process gains
         self.K_time = (y1 - self.y_sp) / step_magnitude
-        print(f"T1: {T1}")
-        print(f"T0: {self.T0}")
         self.K_temp = (T1 - self.T0) / step_magnitude
         
         # Auto-tune if requested or parameters not provided
@@ -331,18 +305,17 @@ class PITemperatureController:
                 
             # chris remember to look at this, currently, theta = imc_lambda
             if theta is None:
-                theta = 80 # shortest expected layertime
+                theta = 5
                 
         
         # Auto-calculate lambda if not provided
         if imc_lambda is None:
-            # Smaller lambda = faster response but more aggressive
-            imc_lambda = theta * .4
+            # Conservative tuning: lambda between theta and 2*theta
+            imc_lambda = 5
         
-        # IMC-based PI tuning formulas
-        # Derived from IMC design procedure for FOPDT mode
+        # IMC-based PI tuning
         self.Kp_T = tau / (abs(self.K_temp) * (imc_lambda + theta))
-        self.Ki_T = self.Kp_T / tau # Note: Ki = Kp/τi, and τi = τ for IMC
+        self.Ki_T = self.Kp_T / imc_lambda  # Note: Ki = Kp/τi, and τi = τ for IMC
         
         # Set initial feed rate
         self.u_prev = self.u_nom + step_magnitude
@@ -374,39 +347,16 @@ class PITemperatureController:
                             use_deadband: bool = True,
                             use_antiwindup: bool = True) -> Tuple[float, Dict[str, float]]:
         """
-        Compute the next feed rate based on current temperature error.
+        Compute the next feed rate based on current temperature.
         
-        Implements PI control law with practical enhancements:
-            u = u_nom + Kp*e + Ki*∫e dt
-            
-        With modifications for:
-            - Deadband: No action if |error| < threshold
-            - Anti-windup: Stop integration when saturated
-            - Rate limiting: Constrain change per layer
-            
         Args:
             current_temp: Current previous-layer temperature in °C
-            current_time: Current layer time in seconds (for history logging)
-            use_deadband: Whether to apply deadband logic (reduces actuator cycling)
-            use_antiwindup: Whether to apply anti-windup logic (prevents integral buildup)
+            current_time: Current layer time in seconds (optional, for logging)
+            use_deadband: Whether to apply deadband logic
+            use_antiwindup: Whether to apply anti-windup logic
             
         Returns:
-            Tuple of (next_feedrate, diagnostics_dict) where diagnostics contains:
-                - error: Temperature error (°C)
-                - proportional_term: P contribution
-                - integral_term: I contribution  
-                - in_deadband: Whether error is within deadband
-                - saturated: Whether output hit limits
-                - rate_limited_change: Actual change applied
-                
-        Raises:
-            RuntimeError: If controller not calibrated
-            
-        Note:
-            Integration only occurs when:
-                1. Outside deadband (actively controlling)
-                2. Not saturated (anti-windup)
-                3. Not rate-limited (prevents integral buildup during slew)
+            Tuple of (next_feedrate, diagnostics_dict)
         """
         if not self.calibrated:
             raise RuntimeError("Controller must be calibrated before use")
@@ -417,26 +367,21 @@ class PITemperatureController:
         # Raw PI control law
         u_unsat = self.u_nom + self.Kp_T * e_T + self.Ki_T * self.I_T
         
-        # Deadband logic FIRST - decide if we should act
+        # Anti-windup: only integrate if output is not saturated
+        if use_antiwindup:
+            if self.u_min < u_unsat < self.u_max:
+                self.I_T += e_T
+        else:
+            self.I_T += e_T
+        
+        # Deadband logic
         if use_deadband and abs(e_T) <= self.dead_T and len(self.history['feeds']) > 0:
             u_target = self.u_prev
-            # Don't integrate when in deadband - we're not acting
         else:
             u_target = u_unsat
-            # Calculate what change we'd want
-            du_requested = u_target - self.u_prev
-            
-            # Only integrate when we're actively controlling AND not rate-limited
-            if use_antiwindup:
-                # Don't integrate if: 1) saturated, OR 2) rate-limited
-                if (self.u_min < u_unsat < self.u_max) and (abs(du_requested) <= self.du_max):
-                    self.I_T += e_T
-            else:
-                self.I_T += e_T
         
         # Rate limiting
         du = np.clip(u_target - self.u_prev, -self.du_max, self.du_max)
-
         u_next = np.clip(self.u_prev + du, self.u_min, self.u_max)
         
         # Update state
@@ -466,44 +411,25 @@ class PITemperatureController:
     
     def predict_temperature(self, feedrate: float) -> float:
         """
-        Predict steady-state temperature for given feedrate.
-        
-        Uses linear process model identified from step test:
-            T = T0 + K_temp * (u - u_nom)
-            
-        This assumes temperature responds proportionally to feedrate
-        changes around the nominal operating point.
+        Predict temperature based on feedrate using process model.
         
         Args:
             feedrate: Feed rate in %
             
         Returns:
             Predicted temperature in °C
-            
-        Note:
-            Valid near the calibration operating point.
-            Large deviations may exhibit nonlinear behavior.
         """
         return self.T0 + self.K_temp * (feedrate - self.u_nom)
     
     def predict_layer_time(self, feedrate: float) -> float:
         """
-        Predict layer completion time for given feedrate.
-        
-        Uses linear model:
-            t_layer = y_sp + K_time * (u - u_nom)
-            
-        Where K_time is typically negative (higher feed = shorter time).
+        Predict layer time based on feedrate using process model.
         
         Args:
             feedrate: Feed rate in %
             
         Returns:
             Predicted layer time in seconds
-            
-        Note:
-            Assumes constant layer geometry.
-            May need adjustment for varying layer sizes.
         """
         return self.y_sp + self.K_time * (feedrate - self.u_nom)
     
@@ -531,7 +457,7 @@ class PITemperatureController:
                                        step_magnitude: float = 40.0,
                                        control_start_idx: int = 3,
                                        n_future_layers: int = 15,
-                                       figsize: Tuple[float, float] = (8, 6)) -> None:
+                                       figsize: Tuple[float, float] = (12, 10)) -> None:
         """
         Plot step test data and show how controller would continue from a given point.
         
@@ -548,16 +474,11 @@ class PITemperatureController:
         
         # Detect step change
         diffs = np.diff(times)
-
-        # In calibrate_from_step_test:
-        # Detect step change using relative threshold
-        # More robust than absolute difference for varying layer times
         threshold = (times.max() - times.min()) * 0.4
         step_indices = np.where(np.abs(diffs) > threshold)[0]
         if len(step_indices) == 0:
             raise ValueError("No step change detected in data")
-        
-        step_idx = step_indices[0] + 1 #7
+        step_idx = step_indices[0] + 1
         
         # Calculate measured feed history
         feed_measured = np.ones_like(temps) * self.u_nom
@@ -689,7 +610,6 @@ class PITemperatureController:
         print(f"  Step change at layer: {step_idx}")
         print(f"  Controller starts at layer: {takeover_idx}")
         print(f"  Initial temperature error: {self.T_sp - temps[takeover_idx-1]:.1f}°C")
-        print(f'feeds {np.round(sim_feeds)}')
         if len(sim_temps) > 5:
             final_temp = np.mean(sim_temps[-5:])
             print(f"  Final predicted temperature: {final_temp:.1f}°C")
