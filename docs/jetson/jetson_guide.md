@@ -142,27 +142,6 @@ Expected: 6 cameras on `/dev/video0`, `/dev/video2`, `/dev/video4`, `/dev/video6
 
 ## Quick Verification
 
-### Test WCF Connection
-
-Create `test_wcf.py`:
-
-```python
-from zeep import Client
-
-try:
-    client = Client('http://192.168.0.100:8733/BAAMService?wsdl')
-    layer = client.service.GetValue(8)
-    print(f"WCF Connection: OK - Current layer: {layer}")
-except Exception as e:
-    print(f"WCF Connection: FAILED - {e}")
-```
-
-Run test:
-```bash
-source venv/bin/activate
-python test_wcf.py
-```
-
 ### Test Camera Access
 
 Create `test_cameras.py`:
@@ -196,17 +175,17 @@ python test_cameras.py
 
 1. **Network**: Verify static IP is configured
    ```bash
-   ip addr show eth0 | grep 192.168.0.150
+   ip addr show eth0 | grep 192.168.0.XXX
    ```
 
 2. **Windows PC**: Verify connection
    ```bash
-   ping -c 4 192.168.0.100
+   ping -c 4 192.168.0.XXX
    ```
 
 3. **Virtual Environment**: Activate
    ```bash
-   source ~/baam_control/venv/bin/activate
+   source ~/.ir_6_collect/venv/bin/activate
    ```
 
 4. **Cameras**: Verify all 6 detected with Lepton controls
@@ -218,11 +197,6 @@ python test_cameras.py
    ls -la /dev/video* | wc -l  # Should show 12 (6 cameras x 2 devices each)
    ```
 
-5. **Run Control System**:
-   ```bash
-   cd ~/baam_control
-   ./start_control.sh
-   ```
 
 ## Troubleshooting
 
@@ -242,7 +216,3 @@ python test_cameras.py
 - Reboot if cameras not detected
 - Try `sudo modprobe -r uvcvideo && sudo modprobe uvcvideo`
 - Verify controls loaded: `v4l2-ctl -d /dev/video0 --list-ctrls-menus`
-
----
-*Document Version: 1.0*  
-*Last Updated: [Date]*
