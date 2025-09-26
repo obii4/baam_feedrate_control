@@ -1,0 +1,10 @@
+D:\Projects\Utilities\BaamWCFTest\bin\Debug\BaamWCFTest.exe.config
+D:\Projects\Utilities\BaamWCFTest\bin\Debug\BaamWCFTest.exe
+D:\Projects\Utilities\BaamWCFTest\bin\Debug\BaamWCFTest.pdb
+D:\Projects\Utilities\BaamWCFTest\obj\Debug\BaamWCFTest.csproj.AssemblyReference.cache
+D:\Projects\Utilities\BaamWCFTest\obj\Debug\BaamWCFTest.Form1.resources
+D:\Projects\Utilities\BaamWCFTest\obj\Debug\BaamWCFTest.Properties.Resources.resources
+D:\Projects\Utilities\BaamWCFTest\obj\Debug\BaamWCFTest.csproj.GenerateResource.cache
+D:\Projects\Utilities\BaamWCFTest\obj\Debug\BaamWCFTest.csproj.CoreCompileInputs.cache
+D:\Projects\Utilities\BaamWCFTest\obj\Debug\BaamWCFTest.exe
+D:\Projects\Utilities\BaamWCFTest\obj\Debug\BaamWCFTest.pdb
