@@ -38,12 +38,12 @@ baam_feedrate_control/
 │   ├── controller.py            # PI controller implementation
 │   ├── thermal_capture.py       # Camera management
 │   ├── process_frames.py        # Temperature extraction
-│   ├── wcf_client.py           # HMI communication
+│   ├── wcf_client.py            # HMI communication
 │   └── utils/
-│       ├── camera_utils.py     # Device management
-│       ├── frame_utils.py      # Frame I/O
-│       ├── processor.py        # Line detection
-│       └── utils.py            # Helper functions
+│       ├── camera_utils.py      # Device management
+│       ├── frame_utils.py       # Frame I/O
+│       ├── processor.py         # Line detection
+│       └── utils.py             # Helper functions
 ├── windows/
 │   ├── run_experiment.py                 # Launch script
 │   └── windows_multi_camera_receiver.py  # Display
@@ -255,52 +255,12 @@ The system uses the 63.2% rise time method for first-order systems:
 - Python 3.8+ on both platforms
 - Gigabit Ethernet network
 
-### Jetson Setup
-
-1. Install system dependencies:
-   ```bash
-   sudo apt-get update
-   sudo apt-get install python3-pip python3-venv v4l-utils uvcdynctrl lsof
-   ```
-
-2. Create Python environment:
-   ```bash
-   python3 -m venv /home/chris/baam_ir/.ir_6_collect
-   source /home/chris/baam_ir/.ir_6_collect/bin/activate
-   pip install numpy opencv-python zeep filelock matplotlib scipy
-   ```
-
-3. Configure camera permissions:
-   ```bash
-   sudo usermod -a -G video $USER
    ```
 
 ### Windows Setup
 
-1. Install Python 3.8 or later
-2. Install required packages:
-   ```bash
-   pip install numpy opencv-python zeep matplotlib
-   ```
 
-3. Configure firewall for ports 12345-12350 and 8733
-
-### Network Configuration
-
-Configure static IPs:
-- Windows: 192.168.0.151
-- Jetson: 192.168.0.5
-
-Set up SSH key authentication for passwordless access.
-
-## Usage
-
-### Basic Operation
-
-Launch a standard control session:
-```bash
-python windows/run_experiment.py run_001
-```
+Add: Experiment guide
 
 ### Calibration Mode
 
@@ -336,9 +296,8 @@ Each run creates a directory structure:
 - **Control Frequency**: 1 Hz (layer-synchronous)
 - **Frame Rate**: 9 Hz per camera (54 Hz total)
 - **Processing Latency**: <500ms per frame batch
-- **Temperature Accuracy**: ±2°C
-- **Network Bandwidth**: ~2.1 MB/s sustained
-- **Typical Correction**: 10-20% feedrate adjustment per layer
+- **Temperature Accuracy**: N°C
+- **Typical Correction**: 0-20% feedrate adjustment per layer
 
 ## Safety Features
 
@@ -370,11 +329,11 @@ Each run creates a directory structure:
 
 ## License
 
-[Specify your license]
+
 
 ## Authors
 
-[Your name and contact information]
+
 
 ## Acknowledgments
 
